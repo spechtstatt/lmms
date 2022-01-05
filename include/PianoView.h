@@ -30,6 +30,7 @@
 
 #include "AutomatableModel.h"
 #include "ModelView.h"
+#include "ModelView.h"
 
 class Piano;
 
@@ -40,9 +41,9 @@ class PianoView : public QWidget, public ModelView
 public:
 	PianoView( QWidget * _parent );
 	virtual ~PianoView() = default;
-
 	static int getKeyFromKeyEvent( QKeyEvent * _ke );
-
+	static QString getNoteStringByKey(int key);
+	const static QString noteStrings[];
 
 public:
 	void keyPressEvent( QKeyEvent * ke ) override;
@@ -67,6 +68,7 @@ private:
 	int getKeyWidth(int key_num) const;
 	int getKeyHeight(int key_num) const;
 	IntModel *getNearestMarker(int key, QString* title = nullptr);
+	void setMarkerKeyValue(IntModel *noteModel, int key_num);
 
 	static QPixmap * s_whiteKeyPm;
 	static QPixmap * s_blackKeyPm;
@@ -81,11 +83,15 @@ private:
 	int m_startKey;					//!< first key when drawing
 	int m_lastKey;					//!< previously pressed key
 	IntModel *m_movedNoteModel;		//!< note marker which is being moved
-
+	int m_lastContextMenuKey;		//!< previous key selected by the context menu
 
 
 private slots:
 	void pianoScrolled( int _new_pos );
+	void setBaseNote();
+	void setFirstKey();
+	void setLastKey();
+	void setSingleKey();
 
 signals:
 	void keyPressed( int );
