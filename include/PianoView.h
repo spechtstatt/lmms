@@ -67,10 +67,8 @@ private:
 	int getKeyX( int _key_num ) const;
 	int getKeyWidth(int key_num) const;
 	int getKeyHeight(int key_num) const;
-	IntModel *getNearestMarker(int key, QString* title = nullptr);
-	bool setMarkerKeyValue(IntModel *noteModel, int key_num, bool ignoreConstraints = false);
-	bool firstMarkerAllowed(int key_num);
-	bool lastMarkerAllowed(int key_num);
+	IntModel *getNearestMarker(int key);
+	bool setMarkerKeyValue(IntModel *noteModel, int key_num);
 
 	static QPixmap * s_whiteKeyPm;
 	static QPixmap * s_blackKeyPm;
@@ -89,10 +87,6 @@ private:
 
 private slots:
 	void pianoScrolled( int _new_pos );
-	void setBaseNote();
-	void setFirstKey();
-	void setLastKey();
-	void setSingleKey();
 
 signals:
 	void keyPressed( int );

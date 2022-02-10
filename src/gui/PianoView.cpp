@@ -43,8 +43,6 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QVBoxLayout>
-#include <QtWidgets>
-#include <QtGui>
 
 #include "PianoView.h"
 #include "Piano.h"
@@ -433,7 +431,6 @@ void PianoView::contextMenuEvent(QContextMenuEvent *me)
 		return;
 	}
 
-	QString title;
 	int key_num = getKeyFromMouse(me->pos());
 
 	if (me->pos().y() > PIANO_BASE)
@@ -441,22 +438,34 @@ void PianoView::contextMenuEvent(QContextMenuEvent *me)
 		// context menu for the key area
 		m_lastContextMenuKey = key_num;
 
-		title = QString("Key %1 [%2]").arg(getNoteStringByKey(key_num)).arg(key_num);
+		CaptionMenu contextMenu(tr("Key %1 [%2]").arg(getNoteStringByKey(key_num)).arg(key_num));
 
-		CaptionMenu contextMenu(title);
-		QAction *actionBase = contextMenu.addAction(tr( "Set &base note" ),
-								this, SLOT( setBaseNote() ) );
+		QAction *actionBase = contextMenu.addAction(tr("Set &base note"));
 		contextMenu.addSeparator();
+		QAction *actionFirst = contextMenu.addAction(tr("Set &first key"));
+		QAction *actionLast = contextMenu.addAction(tr("Set &last key"));
+		QAction *actionSingle = contextMenu.addAction(tr("Set &single key"));
 
-		QAction *actionFirst = contextMenu.addAction(tr( "Set &first key" ),
-								this, SLOT( setFirstKey() ) );
-		QAction *actionLast = contextMenu.addAction(tr( "Set &last key" ),
-								this, SLOT( setLastKey() ) );
-		contextMenu.addAction(tr( "Set &single key" ),
-								this, SLOT( setSingleKey() ) );
+		connect(actionBase, &QAction::triggered, &contextMenu, [this]()
+		{
+			setMarkerKeyValue(m_piano->instrumentTrack()->baseNoteModel(), m_lastContextMenuKey);
+		});
+		connect(actionFirst, &QAction::triggered, &contextMenu, [this]()
+		{
+			setMarkerKeyValue(m_piano->instrumentTrack()->firstKeyModel(), m_lastContextMenuKey);
+		});
+		connect(actionLast, &QAction::triggered, &contextMenu, [this]()
+		{
+			setMarkerKeyValue(m_piano->instrumentTrack()->lastKeyModel(), m_lastContextMenuKey);
+		});
+		connect(actionSingle, &QAction::triggered, &contextMenu, [this]()
+		{
+			setMarkerKeyValue(m_piano->instrumentTrack()->firstKeyModel(), m_lastContextMenuKey);
+			setMarkerKeyValue(m_piano->instrumentTrack()->lastKeyModel(), m_lastContextMenuKey);
+		});
 
-		actionFirst->setEnabled(key_num != m_piano->instrumentTrack()->firstKeyModel()->value() && firstMarkerAllowed(key_num));
-		actionLast->setEnabled(key_num != m_piano->instrumentTrack()->lastKeyModel()->value() && lastMarkerAllowed(key_num));
+		actionFirst->setEnabled(key_num != m_piano->instrumentTrack()->firstKeyModel()->value());
+		actionLast->setEnabled(key_num != m_piano->instrumentTrack()->lastKeyModel()->value());
 		actionBase->setEnabled(key_num != m_piano->instrumentTrack()->baseNoteModel()->value());
 
 		contextMenu.exec(QCursor::pos());
@@ -464,8 +473,8 @@ void PianoView::contextMenuEvent(QContextMenuEvent *me)
 	else
 	{
 		// context menu for the black stripe above the keys containing the first/last/base markers
-		IntModel *noteModel = getNearestMarker(key_num, &title);
-		CaptionMenu contextMenu(title);
+		IntModel *noteModel = getNearestMarker(key_num);
+		CaptionMenu contextMenu(noteModel->displayName());
 		AutomatableModelView amv(noteModel, &contextMenu);
 		amv.addDefaultActions(&contextMenu);
 
@@ -544,53 +553,22 @@ void PianoView::mousePressEvent(QMouseEvent *me)
 	}
 }
 
-bool PianoView::setMarkerKeyValue(IntModel *noteModel, int key_num, bool ignoreConstraints)
+bool PianoView::setMarkerKeyValue(IntModel *noteModel, int key_num)
 {
-	if (!ignoreConstraints)
+	auto firstModel = m_piano->instrumentTrack()->firstKeyModel();
+	auto lastModel = m_piano->instrumentTrack()->lastKeyModel();
+
+	if (noteModel == firstModel && lastModel->value() < key_num)
 	{
-		if (m_piano->instrumentTrack()->firstKeyModel() == noteModel && !firstMarkerAllowed(key_num)) return false;
-		if (m_piano->instrumentTrack()->lastKeyModel() == noteModel && !lastMarkerAllowed(key_num)) return false;
+		lastModel->setValue(key_num);
 	}
+	else if (noteModel == lastModel && firstModel->value() > key_num)
+	{
+		firstModel->setValue(key_num);
+	}
+
 	noteModel->setValue(static_cast<float>(key_num));
-	if (noteModel == m_piano->instrumentTrack()->baseNoteModel()) { emit baseNoteChanged(); }	// TODO: not actually used by anything?
-	return true;
 }
-
-bool PianoView::firstMarkerAllowed(int key_num)
-{
-	return key_num <=  m_piano->instrumentTrack()->lastKeyModel()->value();
-}
-
-bool PianoView::lastMarkerAllowed(int key_num)
-{
-	return key_num >=  m_piano->instrumentTrack()->firstKeyModel()->value();
-}
-
-
-void PianoView::setBaseNote()
-{
-	setMarkerKeyValue(m_piano->instrumentTrack()->baseNoteModel(), m_lastContextMenuKey);
-	update();
-}
-
-void PianoView::setFirstKey()
-{
-	if (setMarkerKeyValue(m_piano->instrumentTrack()->firstKeyModel(), m_lastContextMenuKey)) update();
-}
-
-void PianoView::setLastKey()
-{
-	if (setMarkerKeyValue(m_piano->instrumentTrack()->lastKeyModel(), m_lastContextMenuKey)) update();
-}
-
-
-void PianoView::setSingleKey()
-{
-	setMarkerKeyValue(m_piano->instrumentTrack()->firstKeyModel(), m_lastContextMenuKey, true);
-	setMarkerKeyValue(m_piano->instrumentTrack()->lastKeyModel(), m_lastContextMenuKey, true);
-	update();
-}
-
 
 // handler for mouse-release-event
 /*! \brief Handle a mouse release event on the piano display view
@@ -892,9 +870,9 @@ int PianoView::getKeyHeight(int key_num) const
 }
 
 
-/*! \brief Return model and title of the marker closest to the given key
+/*! \brief Return model of the marker closest to the given key
  */
-IntModel* PianoView::getNearestMarker(int key, QString* title)
+IntModel* PianoView::getNearestMarker(int key)
 {
 	const int base = m_piano->instrumentTrack()->baseNote();
 	const int first = m_piano->instrumentTrack()->firstKey();
@@ -902,17 +880,14 @@ IntModel* PianoView::getNearestMarker(int key, QString* title)
 
 	if (abs(key - base) < abs(key - first) && abs(key - base) < abs(key - last))
 	{
-		if (title) {*title = tr("Base note");}
 		return m_piano->instrumentTrack()->baseNoteModel();
 	}
 	else if (abs(key - first) < abs(key - last))
 	{
-		if (title) {*title = tr("First note");}
 		return m_piano->instrumentTrack()->firstKeyModel();
 	}
 	else
 	{
-		if (title) {*title = tr("Last note");}
 		return m_piano->instrumentTrack()->lastKeyModel();
 	}
 }
